@@ -25,14 +25,23 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 // ▼▼▼ REPLACE THIS WITH YOUR FIREBASE CONFIG ▼▼▼
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "REPLACE_WITH_YOUR_API_KEY",
-  authDomain: "REPLACE.firebaseapp.com",
-  projectId: "REPLACE_WITH_PROJECT_ID",
-  storageBucket: "REPLACE.appspot.com",
-  messagingSenderId: "REPLACE",
-  appId: "REPLACE"
+  apiKey: "AIzaSyABASncAFPj6LhpG3FNMUgbo_I5XSBKj7o",
+  authDomain: "npl-cricket-2025.firebaseapp.com",
+  projectId: "npl-cricket-2025",
+  storageBucket: "npl-cricket-2025.firebasestorage.app",
+  messagingSenderId: "26859261166",
+  appId: "1:26859261166:web:27d28a09cb59b7a0a537ff"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 // ▲▲▲ END OF CONFIG ▲▲▲
 
 const app = initializeApp(firebaseConfig);
