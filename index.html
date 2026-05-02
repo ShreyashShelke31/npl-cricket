@@ -203,8 +203,8 @@ tr:hover td{background:var(--g50)}
 <!-- HEADER -->
 <div class="hdr">
   <div>
-    <div class="hdr-logo">NPL <span>&#9679;</span> Nimbodi Premier League |&nbsp; Season 2026</div>
-    <div class="hdr-sub">Developer| Shreyash Ravindra Shelke 9359190021 &nbsp;</div>
+    <div class="hdr-logo">NPL <span>&#9679;</span> Nimbodi Premier League</div>
+    <div class="hdr-sub">Developer| Shreyash Ravindra Shelke 9359190021 &nbsp;|&nbsp; Season 2026</div>
   </div>
   <div class="ovc"><label>Default overs</label><input type="number" id="gov" value="10" min="1" max="50"></div>
   <!-- <button style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:8px" onclick="toggleDiag()">📊 Debug</button> -->
@@ -702,7 +702,12 @@ function editResult(id) {
   var m = gM(id);
   var c = prompt('Edit result:\n1. '+gT(m.teamA).name+' wins\n2. '+gT(m.teamB).name+' wins\n3. Tie\nEnter 1/2/3:');
   if (!c) return;
-  if (c==='1') m.result=m.teamA; else if (c==='2') m.result=m.teamB; else m.result='tie';
+  if (c==='1') m.result=m.teamA;
+  else if (c==='2') m.result=m.teamB;
+  else m.result='tie';
+  m.status = 'completed';
+  var mom = prompt('Man of the Match (optional):','');
+  m.mom = mom || null;
   save(); toast('Result updated'); refreshAll();
 }
 
@@ -715,10 +720,9 @@ function innScore(inn) {
   inn.balls.forEach(function(b) {
     if (!b.wide && !b.noBall) balls++;
     runs += (b.runs||0) + (b.extraRuns||0);
-    if (b.wicket && b.wicketType !== 'run_out_non_striker') wkts++;
+    if (b.wicket) wkts++;
   });
-  var ex = (inn.extras&&inn.extras.wide||0)+(inn.extras&&inn.extras.noBall||0)+(inn.extras&&inn.extras.bye||0)+(inn.extras&&inn.extras.legBye||0);
-  return { runs:runs+ex, wkts:wkts, balls:balls, overs:Math.floor(balls/6)+'.'+(balls%6) };
+  return { runs:runs, wkts:wkts, balls:balls, overs:Math.floor(balls/6)+'.'+(balls%6) };
 }
 
 // ─── Scoring state ───
@@ -777,7 +781,8 @@ function addBall(runs) {
 // ─── Extras ───
 function addExtra(type) {
   var rs = prompt(type + ' — extra runs:', '1'); if (rs===null) return;
-  var er = parseInt(rs)||1;
+  var er = parseInt(rs, 10);
+  if (isNaN(er) || er < 0) { toast('Enter a valid extra-run value'); return; }
   var m  = gM(aM); var inn = m.innings[aI];
   inn.balls.push({ batsmanId:aBs, bowlerId:aBwl, runs:0, wide:type==='wide', noBall:type==='noBall', extraRuns:er, wicket:false, extraType:type });
   if (!inn.extras) inn.extras = { wide:0, noBall:0, bye:0, legBye:0 };
@@ -1135,7 +1140,11 @@ function pointsTable() {
 function resText(m) {
   if (!m.result) return '<span class="badge bns">Scheduled</span>';
   if (m.result==='tie') return '<span class="badge btie">Tie</span>';
-  var w=gT(m.result); var s0=innScore(m.innings[0]), s1=innScore(m.innings[1]);
+  var w=gT(m.result);
+  if (!m.innings[0].battingTeam || !m.innings[1].battingTeam) {
+    return '<span class="badge bwin">'+(w?w.name:'?')+' won</span>';
+  }
+  var s0=innScore(m.innings[0]), s1=innScore(m.innings[1]);
   if (m.innings[0].battingTeam===m.result) return '<span class="badge bwin">'+(w?w.name:'?')+' won by '+(s0.runs-s1.runs)+' runs</span>';
   return '<span class="badge bwin">'+(w?w.name:'?')+' won by '+(10-s1.wkts)+' wkts</span>';
 }
@@ -1218,7 +1227,7 @@ function renderMatchList() {
         '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
           (m.status==='scheduled'?'<button class="btn bsm bp" onclick="startScoring(\''+m.id+'\')">Score</button>':'')+
           (m.status==='live'?'<button class="btn bsm bw2" onclick="startScoring(\''+m.id+'\')">Resume</button>':'')+
-          (m.status==='completed'?'<button class="btn bsm" onclick="editResult(\''+m.id+'\')">Edit result</button>':'')+
+          '<button class="btn bsm" onclick="editResult(\''+m.id+'\')">'+(m.status==='completed'?'Edit result':'Set result')+'</button>'+ 
           '<button class="btn bsm" onclick="editMatch(\''+m.id+'\')">Edit</button>'+
           '<button class="btn bsm bd" onclick="delMatch(\''+m.id+'\')">Del</button>'+
         '</div></td></tr>';
