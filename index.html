@@ -203,8 +203,8 @@ tr:hover td{background:var(--g50)}
 <!-- HEADER -->
 <div class="hdr">
   <div>
-    <div class="hdr-logo">NPL <span>&#9679;</span> Nimbodi Premier League</div>
-    <div class="hdr-sub">Developer| Shreyash Ravindra Shelke 9359190021 &nbsp;|&nbsp; Season 2026</div>
+    <div class="hdr-logo">NPL <span>&#9679;</span> Nimbodi Premier League|&nbsp; Season 2026</div>
+    <div class="hdr-sub">Developer| Shreyash Ravindra Shelke 9359190021 &nbsp;</div>
   </div>
   <div class="ovc"><label>Default overs</label><input type="number" id="gov" value="10" min="1" max="50"></div>
   <!-- <button style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:8px" onclick="toggleDiag()">📊 Debug</button> -->
@@ -244,6 +244,8 @@ tr:hover td{background:var(--g50)}
 <!-- DASHBOARD -->
 <div id="tab-dashboard" class="section active">
   <div class="mg" id="dmets"></div>
+  <div id="dfinal"></div>
+  <div id="dmanual"></div>
   <div class="tc">
     <div class="card"><div class="ct">Recent results</div><div id="drec"></div></div>
     <div class="card"><div class="ct">Top performers</div><div id="dperf"></div></div>
@@ -295,8 +297,19 @@ tr:hover td{background:var(--g50)}
       <div class="fg"><label>Overs</label><input type="number" id="mov" min="1" max="50" placeholder="10"></div>
       <div class="fg"><label>Venue</label><input type="text" id="mvn" placeholder="Ground name"></div>
     </div>
+    <div class="fr">
+      <div class="fg"><label>Type</label><select id="mtype"><option value="league">League</option><option value="semifinal">Semifinal</option><option value="final">Final</option></select></div>
+    </div>
     <button class="btn bp" onclick="scheduleMatch()">Schedule match</button>
   </div>
+  <div class="card">
+    <div class="ct">Playoffs</div>
+    <div class="br">
+      <button class="btn bp" onclick="createSemifinals()">Create Semifinals</button>
+      <button class="btn bp" onclick="createFinal()">Create Final</button>
+    </div>
+  </div>
+  <div class="card"><div class="ct">Playoffs Matches</div><div id="plist"></div></div>
   <div class="card"><div class="ct">All matches</div><div id="mlist"></div></div>
 </div>
 
@@ -320,7 +333,7 @@ tr:hover td{background:var(--g50)}
 
 <!-- POINTS -->
 <div id="tab-points" class="section">
-  <div class="card"><div class="ct">Points Table — NPL 2025</div><div id="ptbl"></div></div>
+  <div class="card"><div class="ct">Points Table — NPL 2026</div><div id="ptbl"></div></div>
 </div>
 
 <!-- ALL TEAMS (public) -->
@@ -346,12 +359,12 @@ tr:hover td{background:var(--g50)}
 //   FIREBASE CONFIG — NPL Cricket 2026
 // ══════════════════════════════════════════
 var FIREBASE_CONFIG = {
-  apiKey:            "AIzaSyBoP1qd858bxvzu2JWuPWPtoTBt96gSvdU",
-  authDomain:        "npl-cricket-2026.firebaseapp.com",
-  projectId:         "npl-cricket-2026",
-  storageBucket:     "npl-cricket-2026.firebasestorage.app",
+ apiKey: "AIzaSyBoP1qd858bxvzu2JWuPWPtoTBt96gSvdU",
+  authDomain: "npl-cricket-2026.firebaseapp.com",
+  projectId: "npl-cricket-2026",
+  storageBucket: "npl-cricket-2026.firebasestorage.app",
   messagingSenderId: "1082584320368",
-  appId:             "1:1082584320368:web:3bfe261618a06906bfa7b5"
+  appId: "1:1082584320368:web:3bfe261618a06906bfa7b5"
 };
 // ══════════════════════════════════════════
 
@@ -379,6 +392,7 @@ function mergeDB(raw) {
   if (!db.teams)    db.teams    = [];
   if (!db.players)  db.players  = [];
   if (!db.matches)  db.matches  = [];
+  if (!db.manualWinners) db.manualWinners = [];
   console.log("[DEBUG] Merge complete. DB now has:", db.teams.length, "teams,", db.players.length, "players,", db.matches.length, "matches");
 }
 
@@ -671,10 +685,11 @@ function scheduleMatch() {
   var dt  = document.getElementById('mdt').value;
   var ov  = parseInt(document.getElementById('mov').value)||db.settings.overs;
   var vn  = document.getElementById('mvn').value.trim();
+  var type = document.getElementById('mtype').value;
   if (!ta||!tb) { toast('Select both teams'); return; }
-  if (ta===tb)  { toast('Teams must be different'); return; }
+  if (ta===tb && type === 'league')  { toast('Teams must be different for league matches'); return; }
   db.matches.push({
-    id:uid(), teamA:ta, teamB:tb, date:dt, overs:ov, venue:vn,
+    id:uid(), teamA:ta, teamB:tb, date:dt, overs:ov, venue:vn, type:type,
     status:'scheduled', toss:null,
     innings:[
       { battingTeam:null, balls:[], extras:{ wide:0, noBall:0, bye:0, legBye:0 } },
@@ -684,6 +699,7 @@ function scheduleMatch() {
   });
   save();
   ['mta','mtb','mdt','mvn','mov'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('mtype').value='league';
   toast('Match scheduled!'); refreshAll();
 }
 function delMatch(id) {
@@ -709,6 +725,101 @@ function editResult(id) {
   var mom = prompt('Man of the Match (optional):','');
   m.mom = mom || null;
   save(); toast('Result updated'); refreshAll();
+}
+
+function addManualWinner() {
+  if (!isAdmin) return;
+  if (!db.manualWinners) db.manualWinners = [];
+  if (db.manualWinners.length >= 5) { toast('Maximum 5 manual winners allowed'); return; }
+  var name = prompt('Enter manual winner name:', '');
+  if (name === null) return;
+  name = name.trim();
+  if (!name) { toast('Winner name cannot be empty'); return; }
+  db.manualWinners.push(name);
+  save(); refreshAll();
+}
+
+function editManualWinner(index) {
+  if (!isAdmin || !db.manualWinners) return;
+  var current = db.manualWinners[index] || '';
+  var name = prompt('Edit manual winner:', current);
+  if (name === null) return;
+  name = name.trim();
+  if (!name) {
+    db.manualWinners.splice(index, 1);
+    toast('Manual winner removed');
+  } else {
+    db.manualWinners[index] = name;
+    toast('Manual winner updated');
+  }
+  save(); refreshAll();
+}
+
+function createSemifinals() {
+  var selected = [];
+  function pickNext() {
+    if (selected.length >= 4) {
+      // create matches
+      var m1 = {
+        id: uid(), teamA: selected[0], teamB: selected[1], type: 'semifinal',
+        status: 'scheduled', toss: null,
+        innings: [
+          { battingTeam: null, balls: [], extras: { wide: 0, noBall: 0, bye: 0, legBye: 0 } },
+          { battingTeam: null, balls: [], extras: { wide: 0, noBall: 0, bye: 0, legBye: 0 } }
+        ],
+        result: null, mom: null, created: Date.now(), overs: db.settings.overs, venue: '', date: ''
+      };
+      var m2 = {
+        id: uid(), teamA: selected[2], teamB: selected[3], type: 'semifinal',
+        status: 'scheduled', toss: null,
+        innings: [
+          { battingTeam: null, balls: [], extras: { wide: 0, noBall: 0, bye: 0, legBye: 0 } },
+          { battingTeam: null, balls: [], extras: { wide: 0, noBall: 0, bye: 0, legBye: 0 } }
+        ],
+        result: null, mom: null, created: Date.now(), overs: db.settings.overs, venue: '', date: ''
+      };
+      db.matches.push(m1, m2);
+      save();
+      toast('Semifinals created');
+      refreshAll();
+      return;
+    }
+    var avail = db.teams.filter(t => !selected.includes(t.id)).map(t => ({ id: t.id, label: t.name }));
+    openPicker('Select team ' + (selected.length + 1) + ' for semifinals', avail, function(id) {
+      selected.push(id);
+      pickNext();
+    });
+  }
+  pickNext();
+}
+
+function createFinal() {
+  var avail = db.teams.map(t => ({ id: t.id, label: t.name }));
+  var selected = [];
+  function pickNext() {
+    if (selected.length >= 2) {
+      var m = {
+        id: uid(), teamA: selected[0], teamB: selected[1], type: 'final',
+        status: 'scheduled', toss: null,
+        innings: [
+          { battingTeam: null, balls: [], extras: { wide: 0, noBall: 0, bye: 0, legBye: 0 } },
+          { battingTeam: null, balls: [], extras: { wide: 0, noBall: 0, bye: 0, legBye: 0 } }
+        ],
+        result: null, mom: null, created: Date.now(), overs: db.settings.overs, venue: '', date: ''
+      };
+      db.matches.push(m);
+      save();
+      toast('Final created');
+      refreshAll();
+      return;
+    }
+    var remaining = avail.filter(t => !selected.includes(t.id));
+    openPicker('Select team ' + (selected.length + 1) + ' for final', remaining, function(id) {
+      selected.push(id);
+      pickNext();
+    });
+  }
+  pickNext();
 }
 
 // ═══════════════════════════════════════
@@ -1119,10 +1230,10 @@ function playerStats() {
   return { bat:bat, bwl:bwl };
 }
 
-function pointsTable() {
+function pointsTable(types) {
   var tbl={};
   db.teams.forEach(function(t){ tbl[t.id]={played:0,won:0,lost:0,tied:0,pts:0,rf:0,bf:0,ra:0,ba:0}; });
-  db.matches.filter(function(m){ return m.status==='completed'&&m.result; }).forEach(function(m) {
+  db.matches.filter(function(m){ return m.status==='completed'&&m.result && (!types || types.indexOf((m.type||'league'))>=0); }).forEach(function(m) {
     var a=m.teamA, b=m.teamB; if (!tbl[a]||!tbl[b]) return;
     tbl[a].played++; tbl[b].played++;
     var s0=innScore(m.innings[0]), s1=innScore(m.innings[1]);
@@ -1166,13 +1277,57 @@ function renderDash() {
   var up=db.matches.filter(function(m){return m.status==='scheduled';}).length;
   var ps=playerStats(); var tr=0;
   db.players.forEach(function(p){ if((ps.bat[p.id]&&ps.bat[p.id].runs||0)>tr) tr=ps.bat[p.id].runs; });
+  
+  // Check for final winner and runner-up
+  var finalWinner = null;
+  var finalRunner = null;
+  var finalMatch = db.matches.find(function(m){return m.type==='final' && m.status==='completed' && m.result;});
+  if (finalMatch) {
+    finalWinner = gT(finalMatch.result);
+    var loserId = finalMatch.teamA===finalMatch.result ? finalMatch.teamB : finalMatch.teamA;
+    finalRunner = gT(loserId);
+  }
+
   document.getElementById('dmets').innerHTML =
+    (finalWinner ? '<div class="met" style="background:var(--green);color:#fff"><div class="mv" style="font-size:24px">🏆</div><div class="ml">Winner: '+finalWinner.name+'</div></div>' : '') +
+    (finalRunner ? '<div class="met" style="background:#fde68a;color:#92400e"><div class="mv" style="font-size:24px">🥈</div><div class="ml">Runner-up: '+finalRunner.name+'</div></div>' : '') +
     '<div class="met"><div class="mv">'+db.teams.length+'</div><div class="ml">Teams</div></div>'+
     '<div class="met"><div class="mv">'+db.players.length+'</div><div class="ml">Players</div></div>'+
     '<div class="met"><div class="mv">'+db.matches.length+'</div><div class="ml">Matches</div></div>'+
     '<div class="met"><div class="mv">'+done+'</div><div class="ml">Completed</div></div>'+
     '<div class="met"><div class="mv">'+up+'</div><div class="ml">Upcoming</div></div>'+
     '<div class="met"><div class="mv">'+tr+'</div><div class="ml">Top runs</div></div>';
+
+  var finalHtml = '';
+  var scheduledFinal = db.matches.find(function(m){return m.type==='final' && m.status!=='completed';});
+  if (finalMatch) {
+    finalHtml = '<div class="card"><div class="ct">Final result</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px">' +
+      '<div class="met" style="background:var(--green);color:#fff"><div class="mv" style="font-size:22px">🏆</div><div class="ml">Winner: '+(finalWinner?finalWinner.name:'?')+'</div></div>' +
+      '<div class="met" style="background:#fde68a;color:#92400e"><div class="mv" style="font-size:22px">🥈</div><div class="ml">Runner-up: '+(finalRunner?finalRunner.name:'?')+'</div></div>' +
+    '</div>';
+    if (isAdmin) finalHtml += '<div class="br"><button class="btn bp" onclick="editResult(\''+finalMatch.id+'\')">Edit final result</button></div>';
+    finalHtml += '</div>';
+  } else if (scheduledFinal) {
+    var ta=gT(scheduledFinal.teamA), tb=gT(scheduledFinal.teamB);
+    finalHtml = '<div class="card"><div class="ct">Final match</div><div style="font-size:13px;color:var(--g400);margin-bottom:10px">'+(ta?ta.name:'?')+' vs '+(tb?tb.name:'?')+'</div>';
+    if (isAdmin) finalHtml += '<div class="br"><button class="btn bp" onclick="editResult(\''+scheduledFinal.id+'\')">Set final winner</button></div>';
+    finalHtml += '</div>';
+  }
+  document.getElementById('dfinal').innerHTML = finalHtml;
+
+  var manualWinners = db.manualWinners || [];
+  var manualHtml = '';
+  if (manualWinners.length || isAdmin) {
+    manualHtml = '<div class="card"><div class="ct">NPL winner 2026</div>';
+    if (manualWinners.length) {
+      manualHtml += '<div style="display:grid;gap:8px;">' + manualWinners.map(function(name,i){ return '<div style="display:flex;justify-content:space-between;align-items:center"><span>'+(i+1)+'. '+name+'</span>' + (isAdmin?'<button class="btn bsm" onclick="editManualWinner('+i+')">Edit</button>':'')+'</div>'; }).join('') + '</div>';
+    } else {
+      manualHtml += '<div class="empty">No winners added yet.</div>';
+    }
+    if (isAdmin) manualHtml += '<div class="br" style="margin-top:12px"><button class="btn bp" onclick="addManualWinner()">Add winner</button></div>';
+    manualHtml += '</div>';
+  }
+  document.getElementById('dmanual').innerHTML = manualHtml;
 
   var rec=db.matches.filter(function(m){return m.status==='completed';}).slice(-5).reverse();
   document.getElementById('drec').innerHTML=rec.length?rec.map(function(m){
@@ -1218,11 +1373,32 @@ function renderMatchList() {
   var el=document.getElementById('mlist'); if(!el)return;
   if(!db.matches.length){el.innerHTML='<div class="empty">No matches yet</div>';return;}
   var sorted=db.matches.slice().sort(function(a,b){return(b.created||0)-(a.created||0);});
-  el.innerHTML='<div class="tw"><table><thead><tr><th>Match</th><th>Date</th><th>Ov</th><th>Venue</th><th>Score</th><th>Result</th><th>Actions</th></tr></thead><tbody>'+
+  el.innerHTML='<div class="tw"><table><thead><tr><th>Match</th><th>Type</th><th>Date</th><th>Ov</th><th>Venue</th><th>Score</th><th>Result</th><th>Actions</th></tr></thead><tbody>'+
     sorted.map(function(m){
       var ta=gT(m.teamA),tb=gT(m.teamB); var s0=innScore(m.innings[0]),s1=innScore(m.innings[1]);
       var sc=(m.status!=='scheduled')?s0.runs+'/'+s0.wkts+' vs '+s1.runs+'/'+s1.wkts:'-';
-      return'<tr><td><strong>'+(ta?ta.short:'?')+' vs '+(tb?tb.short:'?')+'</strong></td><td>'+(m.date||'-')+'</td><td>'+m.overs+'</td><td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(m.venue||'-')+'</td><td style="font-size:12px">'+sc+'</td>'+
+      return'<tr><td><strong>'+(ta?ta.short:'?')+' vs '+(tb?tb.short:'?')+'</strong></td><td><span class="badge brole">'+(m.type||'league')+'</span></td><td>'+(m.date||'-')+'</td><td>'+m.overs+'</td><td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(m.venue||'-')+'</td><td style="font-size:12px">'+sc+'</td>'+
+        '<td>'+(m.status==='completed'?resText(m):'<span class="badge '+(m.status==='live'?'blive':'bns')+'">'+m.status+'</span>')+'</td>'+
+        '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
+          (m.status==='scheduled'?'<button class="btn bsm bp" onclick="startScoring(\''+m.id+'\')">Score</button>':'')+
+          (m.status==='live'?'<button class="btn bsm bw2" onclick="startScoring(\''+m.id+'\')">Resume</button>':'')+
+          '<button class="btn bsm" onclick="editResult(\''+m.id+'\')">'+(m.status==='completed'?'Edit result':'Set result')+'</button>'+ 
+          '<button class="btn bsm" onclick="editMatch(\''+m.id+'\')">Edit</button>'+
+          '<button class="btn bsm bd" onclick="delMatch(\''+m.id+'\')">Del</button>'+
+        '</div></td></tr>';
+    }).join('')+'</tbody></table></div>';
+}
+
+function renderPlayoffsList() {
+  var el=document.getElementById('plist'); if(!el)return;
+  var playoffs=db.matches.filter(function(m){return m.type==='semifinal'||m.type==='final';});
+  if(!playoffs.length){el.innerHTML='<div class="empty">No playoffs matches yet</div>';return;}
+  var sorted=playoffs.slice().sort(function(a,b){return(b.created||0)-(a.created||0);});
+  el.innerHTML='<div class="tw"><table><thead><tr><th>Match</th><th>Type</th><th>Date</th><th>Ov</th><th>Venue</th><th>Score</th><th>Result</th><th>Actions</th></tr></thead><tbody>'+
+    sorted.map(function(m){
+      var ta=gT(m.teamA),tb=gT(m.teamB); var s0=innScore(m.innings[0]),s1=innScore(m.innings[1]);
+      var sc=(m.status!=='scheduled')?s0.runs+'/'+s0.wkts+' vs '+s1.runs+'/'+s1.wkts:'-';
+      return'<tr><td><strong>'+(ta?ta.short:'?')+' vs '+(tb?tb.short:'?')+'</strong></td><td><span class="badge brole">'+(m.type||'league')+'</span></td><td>'+(m.date||'-')+'</td><td>'+m.overs+'</td><td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(m.venue||'-')+'</td><td style="font-size:12px">'+sc+'</td>'+
         '<td>'+(m.status==='completed'?resText(m):'<span class="badge '+(m.status==='live'?'blive':'bns')+'">'+m.status+'</span>')+'</td>'+
         '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
           (m.status==='scheduled'?'<button class="btn bsm bp" onclick="startScoring(\''+m.id+'\')">Score</button>':'')+
@@ -1266,16 +1442,42 @@ function renderStats() {
 function renderPoints() {
   var el=document.getElementById('ptbl'); if(!el)return;
   if(!db.teams.length){el.innerHTML='<div class="empty">No teams yet</div>';return;}
-  var tbl=pointsTable();
-  var sorted=db.teams.map(function(t){return{t:t,s:tbl[t.id]||{}};}).sort(function(a,b){return b.s.pts-a.s.pts||parseFloat(b.s.nrr)-parseFloat(a.s.nrr);});
-  el.innerHTML='<div class="tw"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>Pts</th><th>NRR</th></tr></thead><tbody>'+
+var leagueTbl=pointsTable(['league']);
+  var playoffTbl=pointsTable(['semifinal','final']);
+  var sorted=db.teams.map(function(t){return{t:t,s:leagueTbl[t.id]||{}};}).sort(function(a,b){return b.s.pts-a.s.pts||parseFloat(b.s.nrr)-parseFloat(a.s.nrr);});
+  
+  // Get playoff teams
+  var playoffTeams = new Set();
+  db.matches.filter(function(m){return m.type==='semifinal'||m.type==='final';}).forEach(function(m){
+    playoffTeams.add(m.teamA);
+    playoffTeams.add(m.teamB);
+  });
+  var playoffSorted = db.teams.map(function(t){ return {t:t,s:playoffTbl[t.id]||{}}; })
+    .filter(function(x){return playoffTeams.has(x.t.id);})
+    .sort(function(a,b){return b.s.pts-a.s.pts||parseFloat(b.s.nrr)-parseFloat(a.s.nrr);});
+  
+  var html = '';
+  if (playoffSorted.length > 0) {
+    html += '<div class="card"><div class="ct">Playoff Teams — Playoff Points</div><div class="tw"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>Pts</th><th>NRR</th></tr></thead><tbody>';
+    html += playoffSorted.map(function(x,i){return'<tr '+(i===0&&x.s.pts>0?'style="background:var(--gp)"':'')+'>'+ 
+      '<td style="font-weight:700;color:'+(i===0?'var(--green)':'var(--g400)')+'">'+(i+1)+'</td>'+
+      '<td><strong style="font-family:Rajdhani,sans-serif;font-size:15px">'+x.t.name+'</strong> <span style="font-size:11px;color:var(--g400)">'+x.t.short+'</span></td>'+
+      '<td>'+(x.s.played||0)+'</td><td style="color:var(--green);font-weight:600">'+(x.s.won||0)+'</td>'+
+      '<td style="color:var(--red)">'+(x.s.lost||0)+'</td><td>'+(x.s.tied||0)+'</td>'+
+      '<td style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--green)">'+(x.s.pts||0)+'</td>'+
+      '<td style="font-size:12px">'+(x.s.nrr||'0.000')+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  }
+  
+  html += '<div class="card"><div class="ct">Points Table — NPL 2025</div><div class="tw"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>Pts</th><th>NRR</th></tr></thead><tbody>'+
     sorted.map(function(x,i){return'<tr '+(i===0&&x.s.pts>0?'style="background:var(--gp)"':'')+'>'+
       '<td style="font-weight:700;color:'+(i===0?'var(--green)':'var(--g400)')+'">'+(i+1)+'</td>'+
       '<td><strong style="font-family:Rajdhani,sans-serif;font-size:15px">'+x.t.name+'</strong> <span style="font-size:11px;color:var(--g400)">'+x.t.short+'</span></td>'+
       '<td>'+(x.s.played||0)+'</td><td style="color:var(--green);font-weight:600">'+(x.s.won||0)+'</td>'+
       '<td style="color:var(--red)">'+(x.s.lost||0)+'</td><td>'+(x.s.tied||0)+'</td>'+
       '<td style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--green)">'+(x.s.pts||0)+'</td>'+
-      '<td style="font-size:12px">'+(x.s.nrr||'0.000')+'</td></tr>';}).join('')+'</tbody></table></div>';
+      '<td style="font-size:12px">'+(x.s.nrr||'0.000')+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  
+  el.innerHTML = html;
 }
 
 // ─── PUBLIC: All teams & squads ───
@@ -1428,7 +1630,7 @@ function updateRefreshStatus() {
 function refreshAll() {
   refreshSelects();
   renderDash();
-  if (isAdmin) { renderTeamsList(); renderMatchList(); renderScoringList(); }
+  if (isAdmin) { renderTeamsList(); renderMatchList(); renderPlayoffsList(); renderScoringList(); }
   renderStats();
   renderPoints();
   renderPubTeams();
